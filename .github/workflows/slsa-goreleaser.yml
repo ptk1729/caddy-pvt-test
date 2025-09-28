@@ -1,0 +1,96 @@
+name: Complete process with SLSA provenance
+on:
+  workflow_dispatch:
+  push:
+    tags: ["*"]
+
+jobs:
+  # 1) gather git info
+  args:
+    runs-on: ubuntu-latest
+    outputs:
+      commit-date: ${{ steps.ldflags.outputs.commit-date }}
+      commit:       ${{ steps.ldflags.outputs.commit }}
+      version:      ${{ steps.ldflags.outputs.version }}
+      tree-state:   ${{ steps.ldflags.outputs.tree-state }}
+    steps:
+      - uses: actions/checkout@v4
+        with: { fetch-depth: 0 }
+      - id: ldflags
+        run: |
+          echo "commit-date=$(git log --date=iso8601-strict -1 --pretty=%ct)" >>"$GITHUB_OUTPUT"
+          echo "commit=$GITHUB_SHA"                                  >>"$GITHUB_OUTPUT"
+          echo "version=$(git describe --tags --always --dirty | cut -c2-)" >>"$GITHUB_OUTPUT"
+          echo "tree-state=$(if git diff --quiet; then echo clean; else echo dirty; fi)" >>"$GITHUB_OUTPUT"
+
+  # 2) build and sign
+  build:
+    needs: args
+    permissions:
+      id-token: write   # sign provenance
+      contents: write   # upload release asset
+      actions: read     # read workflow path
+    uses: slsa-framework/slsa-github-generator/.github/workflows/builder_go_slsa3.yml@v2.1.0
+    with:
+      go-version: 1.24
+      upload-assets: true
+      prerelease:  true
+      evaluated-envs: "COMMIT_DATE:${{needs.args.outputs.commit-date}}, COMMIT:${{needs.args.outputs.commit}}, VERSION:${{needs.args.outputs.version}}, TREE_STATE:${{needs.args.outputs.tree-state}}"
+
+      
+
+  # 3) download + verify
+  verify:
+    needs: build
+    runs-on: ubuntu-latest
+    steps:
+      # a) pull the verifier code
+      - uses: actions/checkout@v4
+        with:
+          repository: ptk1729/verifier_service
+          path: verifier_service
+
+      # b) pull the built files
+      - uses: actions/download-artifact@v4
+        with:
+          name: ${{ needs.build.outputs.go-binary-name }}
+
+      - uses: actions/download-artifact@v4
+        with:
+          name: ${{ needs.build.outputs.go-provenance-name }}
+
+      # c) set up Go
+      - uses: actions/setup-go@v5
+        with: { go-version: '1.24' }
+
+      # d) run the check
+      - name: Run verifier
+        run: |
+          cd verifier_service
+          go run main.go \
+            -print-report \
+            -binary-path      "${GITHUB_WORKSPACE}/${{ needs.build.outputs.go-binary-name }}" \
+            -provenance-path  "${GITHUB_WORKSPACE}/${{ needs.build.outputs.go-provenance-name }}" \
+            -source-uri       git+https://github.com/${{ github.repository }} \
+            -report-path      "/tmp/report.json" \
+            https://github.com/${{ github.repository }}
+      - name: Upload verifier report(s)
+        uses: actions/upload-artifact@v4
+        with:
+          name: verifier-report.zip
+          path: /tmp/report.json
+          if-no-files-found: error
+      - name: Run OPA validation
+        run: |
+          test -f /tmp/report.json
+          docker run --rm \
+          -v /tmp:/tmp:ro \
+          docker.io/exactlyprateek/opa_plugin:01 \
+          /tmp/report.json | tee /tmp/opa-result.json
+
+      - name: Upload OPA result
+        uses: actions/upload-artifact@v4
+        with:
+          name: opa-result.json
+          path: /tmp/opa-result.json
+          if-no-files-found: error

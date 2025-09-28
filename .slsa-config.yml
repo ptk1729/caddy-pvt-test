@@ -1,0 +1,52 @@
+# SLSA Configuration for Caddy
+# This file contains configuration for SLSA provenance generation
+
+slsa:
+  # SLSA builder configuration
+  builder:
+    id: "https://github.com/slsa-framework/slsa-github-generator/.github/workflows/builder_go_slsa3.yml@refs/heads/main"
+    type: "https://github.com/slsa-framework/slsa-github-generator/go@v1"
+  
+  # Build configuration
+  build:
+    # Go build flags
+    flags:
+      - "-trimpath"
+      - "-ldflags=-w -s"
+      - "-v"
+    
+    # Environment variables
+    env:
+      - "CGO_ENABLED=0"
+      - "GO111MODULE=on"
+    
+    # Build tags
+    tags:
+      - "nobadger"
+      - "nomysql"
+      - "nopgx"
+  
+  # Attestation configuration
+  attestations:
+    # Enable SLSA provenance
+    slsa_provenance: true
+    
+    # Enable SBOM generation
+    sbom: true
+    
+    # Enable in-toto attestations
+    in_toto: true
+    
+    # SBOM format
+    sbom_format: "cyclonedx-json"
+  
+  # Verification configuration
+  verification:
+    # Public key for verification (GitHub's OIDC)
+    public_key: "https://github.com/slsa-framework/slsa-github-generator/.github/workflows/builder_go_slsa3.yml@refs/heads/main"
+    
+    # Expected repository
+    repository: "caddyserver/caddy"
+    
+    # Expected builder
+    builder: "https://github.com/slsa-framework/slsa-github-generator/.github/workflows/builder_go_slsa3.yml@refs/heads/main"
