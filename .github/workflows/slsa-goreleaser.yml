@@ -14,7 +14,7 @@ jobs:
       version:      ${{ steps.ldflags.outputs.version }}
       tree-state:   ${{ steps.ldflags.outputs.tree-state }}
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v6
         with: { fetch-depth: 0 }
       - id: ldflags
         run: |
@@ -45,22 +45,22 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       # a) pull the verifier code
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v6
         with:
           repository: ptk1729/verifier_service
           path: verifier_service
 
       # b) pull the built files
-      - uses: actions/download-artifact@v4
+      - uses: actions/download-artifact@v8
         with:
           name: ${{ needs.build.outputs.go-binary-name }}
 
-      - uses: actions/download-artifact@v4
+      - uses: actions/download-artifact@v8
         with:
           name: ${{ needs.build.outputs.go-provenance-name }}
 
       # c) set up Go
-      - uses: actions/setup-go@v5
+      - uses: actions/setup-go@v6
         with: { go-version: '1.24' }
 
       # d) run the check
@@ -75,7 +75,7 @@ jobs:
             -report-path      "/tmp/report.json" \
             https://github.com/${{ github.repository }}
       - name: Upload verifier report(s)
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v7
         with:
           name: verifier-report.zip
           path: /tmp/report.json
@@ -89,7 +89,7 @@ jobs:
           /tmp/report.json | tee /tmp/opa-result.json
 
       - name: Upload OPA result
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v7
         with:
           name: opa-result.json
           path: /tmp/opa-result.json
